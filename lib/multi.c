@@ -374,7 +374,8 @@ struct Curl_multi *Curl_multi_handle(int hashsize, /* socket hash */
   multi->ipv6_works = Curl_ipv6works(NULL);
 
 #ifdef ENABLE_WAKEUP
-  if(Curl_socketpair(AF_UNIX, SOCK_STREAM, 0, multi->wakeup_pair) < 0) {
+  //if(Curl_socketpair(AF_UNIX, SOCK_STREAM, 0, multi->wakeup_pair) < 0) {
+  if(Curl_socketpair(AF_INET, SOCK_STREAM, 0, multi->wakeup_pair) < 0) {  // PSoC replaced AF_UNIX with AF_INET
     multi->wakeup_pair[0] = CURL_SOCKET_BAD;
     multi->wakeup_pair[1] = CURL_SOCKET_BAD;
   }
@@ -401,15 +402,21 @@ struct Curl_multi *Curl_multi_handle(int hashsize, /* socket hash */
   return NULL;
 }
 
-struct Curl_multi *curl_multi_init(void)
+//struct Curl_multi *curl_multi_init(void)
+CURLM *curl_multi_init(void)
 {
   return Curl_multi_handle(CURL_SOCKET_HASH_TABLE_SIZE,
                            CURL_CONNECTION_HASH_SIZE);
 }
 
-CURLMcode curl_multi_add_handle(struct Curl_multi *multi,
-                                struct Curl_easy *data)
+//CURLMcode curl_multi_add_handle(struct Curl_multi *multi,
+//                                struct Curl_easy *data)
+CURLMcode curl_multi_add_handle(CURLM *multi_handle,
+                                CURL *curl_handle)
 {
+  struct Curl_multi *multi = (struct Curl_multi *)multi_handle;
+  struct Curl_easy *data = (struct Curl_easy *)curl_handle;
+
   /* First, make some basic checks that the CURLM handle is a good handle */
   if(!GOOD_MULTI_HANDLE(multi))
     return CURLM_BAD_HANDLE;
@@ -680,10 +687,15 @@ static CURLcode multi_done(struct Curl_easy *data,
   return result;
 }
 
-CURLMcode curl_multi_remove_handle(struct Curl_multi *multi,
-                                   struct Curl_easy *data)
+//CURLMcode curl_multi_remove_handle(struct Curl_multi *multi,
+//                                   struct Curl_easy *data)
+CURLMcode curl_multi_remove_handle(CURLM *multi_handle,
+                                   CURL *curl_handle)
 {
+  struct Curl_multi *multi = (struct Curl_multi *)multi_handle;
+  struct Curl_easy *data = (struct Curl_easy *)curl_handle;
   struct Curl_easy *easy = data;
+
   bool premature;
   bool easy_owns_conn;
   struct curl_llist_element *e;
@@ -980,10 +992,12 @@ static int multi_getsock(struct Curl_easy *data,
 
 }
 
-CURLMcode curl_multi_fdset(struct Curl_multi *multi,
+//CURLMcode curl_multi_fdset(struct Curl_multi *multi,
+CURLMcode curl_multi_fdset(CURLM *multi_handle,
                            fd_set *read_fd_set, fd_set *write_fd_set,
                            fd_set *exc_fd_set, int *max_fd)
 {
+  struct Curl_multi *multi = (struct Curl_multi *)multi_handle;
   /* Scan through all the easy handles to get the file descriptors set.
      Some easy handles may not have connected to the remote host yet,
      and then we must make sure that is done. */
@@ -1242,28 +1256,34 @@ static CURLMcode Curl_multi_wait(struct Curl_multi *multi,
   return CURLM_OK;
 }
 
-CURLMcode curl_multi_wait(struct Curl_multi *multi,
+//CURLMcode curl_multi_wait(struct Curl_multi *multi,
+CURLMcode curl_multi_wait(CURLM *multi_handle,
                           struct curl_waitfd extra_fds[],
                           unsigned int extra_nfds,
                           int timeout_ms,
                           int *ret)
 {
+  struct Curl_multi *multi = (struct Curl_multi *)multi_handle;
   return Curl_multi_wait(multi, extra_fds, extra_nfds, timeout_ms, ret, FALSE,
                          FALSE);
 }
 
-CURLMcode curl_multi_poll(struct Curl_multi *multi,
+//CURLMcode curl_multi_poll(struct Curl_multi *multi,
+CURLMcode curl_multi_poll(CURLM *multi_handle,
                           struct curl_waitfd extra_fds[],
                           unsigned int extra_nfds,
                           int timeout_ms,
                           int *ret)
 {
+  struct Curl_multi *multi = (struct Curl_multi *)multi_handle;
   return Curl_multi_wait(multi, extra_fds, extra_nfds, timeout_ms, ret, TRUE,
                          TRUE);
 }
 
-CURLMcode curl_multi_wakeup(struct Curl_multi *multi)
+//CURLMcode curl_multi_wakeup(struct Curl_multi *multi)
+CURLMcode curl_multi_wakeup(CURLM *multi_handle)
 {
+  struct Curl_multi *multi = (struct Curl_multi *)multi_handle;
   /* this function is usually called from another thread,
      it has to be careful only to access parts of the
      Curl_multi struct that are constant */
@@ -2337,8 +2357,11 @@ static CURLMcode multi_runsingle(struct Curl_multi *multi,
 }
 
 
-CURLMcode curl_multi_perform(struct Curl_multi *multi, int *running_handles)
+//CURLMcode curl_multi_perform(struct Curl_multi *multi, int *running_handles)
+CURLMcode curl_multi_perform(CURLM *multi_handle,
+                             int *running_handles)
 {
+  struct Curl_multi *multi = (struct Curl_multi *)multi_handle;
   struct Curl_easy *data;
   CURLMcode returncode = CURLM_OK;
   struct Curl_tree *t;
@@ -2391,8 +2414,10 @@ CURLMcode curl_multi_perform(struct Curl_multi *multi, int *running_handles)
   return returncode;
 }
 
-CURLMcode curl_multi_cleanup(struct Curl_multi *multi)
+//CURLMcode curl_multi_cleanup(struct Curl_multi *multi)
+CURLMcode curl_multi_cleanup(CURLM *multi_handle)
 {
+  struct Curl_multi *multi = (struct Curl_multi *)multi_handle;
   struct Curl_easy *data;
   struct Curl_easy *nextdata;
 
@@ -2460,8 +2485,11 @@ CURLMcode curl_multi_cleanup(struct Curl_multi *multi)
  * beyond. The current design is fully O(1).
  */
 
-CURLMsg *curl_multi_info_read(struct Curl_multi *multi, int *msgs_in_queue)
+//CURLMsg *curl_multi_info_read(struct Curl_multi *multi, int *msgs_in_queue)
+CURLMsg *curl_multi_info_read(CURLM *multi_handle,
+                              int *msgs_in_queue)
 {
+  struct Curl_multi *multi = (struct Curl_multi *)multi_handle;
   struct Curl_message *msg;
 
   *msgs_in_queue = 0; /* default to none */
@@ -2854,9 +2882,11 @@ static CURLMcode multi_socket(struct Curl_multi *multi,
 }
 
 #undef curl_multi_setopt
-CURLMcode curl_multi_setopt(struct Curl_multi *multi,
+//CURLMcode curl_multi_setopt(struct Curl_multi *multi,
+CURLMcode curl_multi_setopt(CURLM *multi_handle,
                             CURLMoption option, ...)
 {
+  struct Curl_multi *multi = (struct Curl_multi *)multi_handle;
   CURLMcode res = CURLM_OK;
   va_list param;
 
@@ -2931,9 +2961,12 @@ CURLMcode curl_multi_setopt(struct Curl_multi *multi,
 /* we define curl_multi_socket() in the public multi.h header */
 #undef curl_multi_socket
 
-CURLMcode curl_multi_socket(struct Curl_multi *multi, curl_socket_t s,
+//CURLMcode curl_multi_socket(struct Curl_multi *multi, curl_socket_t s,
+CURLMcode curl_multi_socket(CURLM *multi_handle,
+                            curl_socket_t s,
                             int *running_handles)
 {
+  struct Curl_multi *multi = (struct Curl_multi *)multi_handle;
   CURLMcode result;
   if(multi->in_callback)
     return CURLM_RECURSIVE_API_CALL;
@@ -2943,9 +2976,12 @@ CURLMcode curl_multi_socket(struct Curl_multi *multi, curl_socket_t s,
   return result;
 }
 
-CURLMcode curl_multi_socket_action(struct Curl_multi *multi, curl_socket_t s,
+//CURLMcode curl_multi_socket_action(struct Curl_multi *multi, curl_socket_t s,
+CURLMcode curl_multi_socket_action(CURLM *multi_handle,
+                                   curl_socket_t s,
                                    int ev_bitmask, int *running_handles)
 {
+  struct Curl_multi *multi = (struct Curl_multi *)multi_handle;
   CURLMcode result;
   if(multi->in_callback)
     return CURLM_RECURSIVE_API_CALL;
@@ -2955,9 +2991,11 @@ CURLMcode curl_multi_socket_action(struct Curl_multi *multi, curl_socket_t s,
   return result;
 }
 
-CURLMcode curl_multi_socket_all(struct Curl_multi *multi, int *running_handles)
-
+//CURLMcode curl_multi_socket_all(struct Curl_multi *multi, int *running_handles)
+CURLMcode curl_multi_socket_all(CURLM *multi_handle,
+                                int *running_handles)
 {
+  struct Curl_multi *multi = (struct Curl_multi *)multi_handle;
   CURLMcode result;
   if(multi->in_callback)
     return CURLM_RECURSIVE_API_CALL;
@@ -3006,9 +3044,11 @@ static CURLMcode multi_timeout(struct Curl_multi *multi,
   return CURLM_OK;
 }
 
-CURLMcode curl_multi_timeout(struct Curl_multi *multi,
+//CURLMcode curl_multi_timeout(struct Curl_multi *multi,
+CURLMcode curl_multi_timeout(CURLM *multi_handle,
                              long *timeout_ms)
 {
+  struct Curl_multi *multi = (struct Curl_multi *)multi_handle;
   /* First, make some basic checks that the CURLM handle is a good handle */
   if(!GOOD_MULTI_HANDLE(multi))
     return CURLM_BAD_HANDLE;
@@ -3244,9 +3284,12 @@ void Curl_expire_clear(struct Curl_easy *data)
 
 
 
-CURLMcode curl_multi_assign(struct Curl_multi *multi, curl_socket_t s,
+//CURLMcode curl_multi_assign(struct Curl_multi *multi, curl_socket_t s,
+CURLMcode curl_multi_assign(CURLM *multi_handle,
+                            curl_socket_t s,
                             void *hashp)
 {
+  struct Curl_multi *multi = (struct Curl_multi *)multi_handle;
   struct Curl_sh_entry *there = NULL;
 
   if(multi->in_callback)

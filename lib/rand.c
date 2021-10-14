@@ -27,6 +27,7 @@
 #endif
 
 #include <curl/curl.h>
+#include "urldata.h" /* for struct Curl_easy */ // PSoC added
 #include "vtls/vtls.h"
 #include "sendf.h"
 #include "rand.h"

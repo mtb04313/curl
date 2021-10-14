@@ -1,0 +1,11 @@
+./CMake
+./docs
+./m4
+./packages
+./plan9
+./projects
+./scripts
+./src
+./tests
+./winbuild
+

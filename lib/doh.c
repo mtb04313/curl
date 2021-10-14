@@ -429,7 +429,7 @@ Curl_addrinfo *Curl_doh(struct connectdata *conn,
   curl_slist_free_all(data->req.doh.headers);
   data->req.doh.headers = NULL;
   for(slot = 0; slot < DOH_PROBE_SLOTS; slot++) {
-    Curl_close(&data->req.doh.probe[slot].easy);
+    Curl_close((struct Curl_easy **)&data->req.doh.probe[slot].easy);
   }
   return NULL;
 }
@@ -958,7 +958,7 @@ CURLcode Curl_doh_is_resolved(struct connectdata *conn,
     /* remove DOH handles from multi handle and close them */
     for(slot = 0; slot < DOH_PROBE_SLOTS; slot++) {
       curl_multi_remove_handle(data->multi, data->req.doh.probe[slot].easy);
-      Curl_close(&data->req.doh.probe[slot].easy);
+      Curl_close((struct Curl_easy **)&data->req.doh.probe[slot].easy);
     }
     /* parse the responses, create the struct and return it! */
     init_dohentry(&de);

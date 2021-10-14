@@ -33,6 +33,10 @@
 #include <stdarg.h>
 #include <ctype.h>
 
+/* PSoC added */
+#include "curl_config.h"
+
+
 #ifdef HAVE_ERRNO_H
 #include <errno.h>
 #endif

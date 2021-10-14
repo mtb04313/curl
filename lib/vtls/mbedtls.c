@@ -62,6 +62,9 @@
 #include "curl_memory.h"
 #include "memdebug.h"
 
+#include "cyabs_rtos.h"     // PSoC added
+#define PSOC_TLS_INTERNAL_RECV_DELAY_MS  600 // PSoC added
+
 struct ssl_backend_data {
   mbedtls_ctr_drbg_context ctr_drbg;
   mbedtls_entropy_context entropy;
@@ -119,6 +122,8 @@ static int entropy_func_mutex(void *data, unsigned char *output, size_t len)
 #undef MBEDTLS_DEBUG
 
 #ifdef MBEDTLS_DEBUG
+#include "mbedtls/debug.h"
+
 static void mbed_debug(void *context, int level, const char *f_name,
                        int line_nb, const char *line)
 {
@@ -131,6 +136,34 @@ static void mbed_debug(void *context, int level, const char *f_name,
 
   infof(data, "%s", line);
   (void) level;
+}
+
+static int mbed_verify( void *data,
+                        mbedtls_x509_crt *crt,
+                        int depth,
+                        uint32_t *flags)
+{
+    const uint32_t buf_size = 2048;
+    char *buf = malloc(buf_size);
+    (void) data;
+
+    if (buf != NULL) {
+      mbedtls_x509_crt_info(buf, buf_size - 1, "  ", crt);
+    }
+
+    if (*flags == 0)
+    {
+
+    }
+    else
+    {
+      if (buf != NULL) {
+        mbedtls_x509_crt_verify_info(buf, buf_size, "  ! ", *flags);
+      }
+    }
+
+    free(buf);
+    return 0;
 }
 #else
 #endif
@@ -235,6 +268,98 @@ set_ssl_version_min_max(struct connectdata *conn, int sockindex)
   return result;
 }
 
+
+/*
+typedef uint32_t cy_rslt_t;
+#define CY_RSLT_SUCCESS                    ((cy_rslt_t)0x00000000U)
+*/
+
+/*
+#include "cy_secure_sockets.h"
+#include "cy_tls.h"
+#include "cy_secure_sockets_debug.h"
+#include "cyabs_rtos.h"
+#include "cy_worker_thread.h"
+#include "cyabs_rtos_impl.h"
+#include <lwip/api.h>
+#include <lwip/tcp.h>
+*/
+
+
+/**
+ * Network send function.
+ *
+ * @param[in] context  Caller context.
+ * @param[in] buffer   Byte buffer to send.
+ * @param[in] length   Length of byte buffer to send.
+ *
+ * @return Number of bytes sent, or a negative value on error.
+ */
+static int psoc_tls_internal_send(void *context,
+                                  const unsigned char *buffer,
+                                  size_t length)
+{
+  int ret;
+  int fd = ((mbedtls_net_context *) context)->fd;
+
+  if (fd < 0) {
+      return (MBEDTLS_ERR_NET_INVALID_CONTEXT);
+  }
+
+  ret = (int)write(fd, buffer, length );
+
+  if (ret < 0) {
+    if (ret == ERR_WOULDBLOCK) {
+        return (MBEDTLS_ERR_SSL_WANT_WRITE);
+    }
+
+    DEBUG_PRINT(("curl: %s [%d] write failed: ret = %d\n", __FUNCTION__, __LINE__, ret));
+    return( MBEDTLS_ERR_NET_SEND_FAILED );
+  }
+
+  return( ret );
+}
+
+/**
+ * Network receive function.
+ *
+ * @param[in]  context Caller context.
+ * @param[out] buffer  Byte buffer to receive into.
+ * @param[in]  length  Length of byte buffer for receive.
+ *
+ * @return Number of bytes received, or a negative value on error.
+ */
+static int psoc_tls_internal_recv(void *context,
+                                  unsigned char *buffer,
+                                  size_t length)
+{
+  int ret;
+  int fd = ((mbedtls_net_context *) context)->fd;
+
+  if (fd < 0) {
+      return (MBEDTLS_ERR_NET_INVALID_CONTEXT);
+  }
+
+#if defined COMPONENT_RTTHREAD   // PSoC added
+#if (PSOC_TLS_INTERNAL_RECV_DELAY_MS > 0)
+  cy_rtos_delay_milliseconds(PSOC_TLS_INTERNAL_RECV_DELAY_MS);
+#endif
+#endif
+
+  ret = (int)read(fd, buffer, length);
+
+  if (ret < 0) {
+    if (ret == ERR_WOULDBLOCK) {
+        return (MBEDTLS_ERR_SSL_WANT_READ);
+    }
+
+    DEBUG_PRINT(("curl: %s [%d] read failed: ret = %d\n", __FUNCTION__, __LINE__, ret));
+    return (MBEDTLS_ERR_NET_RECV_FAILED);
+  }
+
+  return( ret );
+}
+
 static CURLcode
 mbed_connect_step1(struct connectdata *conn,
                    int sockindex)
@@ -291,6 +416,7 @@ mbed_connect_step1(struct connectdata *conn,
   mbedtls_x509_crt_init(&BACKEND->cacert);
 
   if(ssl_cafile) {
+#if defined(MBEDTLS_FS_IO)  // PSoC added
     ret = mbedtls_x509_crt_parse_file(&BACKEND->cacert, ssl_cafile);
 
     if(ret<0) {
@@ -303,9 +429,26 @@ mbed_connect_step1(struct connectdata *conn,
       if(verifypeer)
         return CURLE_SSL_CACERT_BADFILE;
     }
+#else
+    ret = mbedtls_x509_crt_parse( &BACKEND->cacert,
+                                  (const unsigned char *)ssl_cafile,
+                                  strlen(ssl_cafile) + 1);
+    if(ret<0) {
+#ifdef MBEDTLS_ERROR_C
+      mbedtls_strerror(ret, errorbuf, sizeof(errorbuf));
+#endif /* MBEDTLS_ERROR_C */
+      failf(data, "Error parsing ca cert - mbedTLS: (-0x%04X) %s",
+            -ret, errorbuf);
+
+      if(verifypeer)
+        return CURLE_SSL_CACERT_BADFILE;
+    }
+
+#endif
   }
 
   if(ssl_capath) {
+#if defined(MBEDTLS_FS_IO)  // PSoC added
     ret = mbedtls_x509_crt_parse_path(&BACKEND->cacert, ssl_capath);
 
     if(ret<0) {
@@ -318,8 +461,12 @@ mbed_connect_step1(struct connectdata *conn,
       if(verifypeer)
         return CURLE_SSL_CACERT_BADFILE;
     }
+#else
+
+#endif
   }
 
+#if defined(MBEDTLS_FS_IO)  // PSoC added
   /* Load the client certificate */
   mbedtls_x509_crt_init(&BACKEND->clicert);
 
@@ -336,7 +483,11 @@ mbed_connect_step1(struct connectdata *conn,
       return CURLE_SSL_CERTPROBLEM;
     }
   }
+#else
+  (void)ssl_cert;
+#endif
 
+#if defined(MBEDTLS_FS_IO)  // PSoC added
   /* Load the client private key */
   mbedtls_pk_init(&BACKEND->pk);
 
@@ -357,7 +508,11 @@ mbed_connect_step1(struct connectdata *conn,
       return CURLE_SSL_CERTPROBLEM;
     }
   }
+#else
 
+#endif
+
+#if defined(MBEDTLS_X509_CRL_PARSE_C)
   /* Load the CRL */
   mbedtls_x509_crl_init(&BACKEND->crl);
 
@@ -374,8 +529,12 @@ mbed_connect_step1(struct connectdata *conn,
       return CURLE_SSL_CRL_BADFILE;
     }
   }
+#else
+  (void)ssl_crlfile;
 
-  infof(data, "mbedTLS: Connecting to %s:%ld\n", hostname, port);
+#endif
+
+  DEBUG_PRINT(("mbedTLS: Connecting to %s:%ld\n", hostname, port));
 
   mbedtls_ssl_config_init(&BACKEND->config);
 
@@ -430,9 +589,10 @@ mbed_connect_step1(struct connectdata *conn,
 
   mbedtls_ssl_conf_rng(&BACKEND->config, mbedtls_ctr_drbg_random,
                        &BACKEND->ctr_drbg);
-  mbedtls_ssl_set_bio(&BACKEND->ssl, &conn->sock[sockindex],
-                      mbedtls_net_send,
-                      mbedtls_net_recv,
+  mbedtls_ssl_set_bio(&BACKEND->ssl,
+                      &conn->sock[sockindex],
+                      psoc_tls_internal_send, //mbedtls_net_send, // PSoC edited
+                      psoc_tls_internal_recv, //mbedtls_net_recv, // PSoC edited
                       NULL /*  rev_timeout() */);
 
   mbedtls_ssl_conf_ciphersuites(&BACKEND->config,
@@ -512,6 +672,8 @@ mbed_connect_step1(struct connectdata *conn,
    * - 4 Verbose
    */
   mbedtls_debug_set_threshold(4);
+
+  mbedtls_ssl_conf_verify(&BACKEND->config, mbed_verify, NULL);   /* PSoC added */
 #endif
 
   /* give application a chance to interfere with mbedTLS set up. */
@@ -775,7 +937,11 @@ static void Curl_mbedtls_close(struct connectdata *conn, int sockindex)
   mbedtls_pk_free(&BACKEND->pk);
   mbedtls_x509_crt_free(&BACKEND->clicert);
   mbedtls_x509_crt_free(&BACKEND->cacert);
+
+#if defined(MBEDTLS_X509_CRL_PARSE_C) // PSoC added
   mbedtls_x509_crl_free(&BACKEND->crl);
+#endif
+
   mbedtls_ssl_config_free(&BACKEND->config);
   mbedtls_ssl_free(&BACKEND->ssl);
   mbedtls_ctr_drbg_free(&BACKEND->ctr_drbg);

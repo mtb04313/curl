@@ -32,8 +32,8 @@
 /* The last #include file should be: */
 #include "memdebug.h"
 
-struct Curl_share *
-curl_share_init(void)
+//struct Curl_share *curl_share_init(void)
+CURLSH *curl_share_init(void)
 {
   struct Curl_share *share = calloc(1, sizeof(struct Curl_share));
   if(share) {
@@ -49,9 +49,10 @@ curl_share_init(void)
 }
 
 #undef curl_share_setopt
-CURLSHcode
-curl_share_setopt(struct Curl_share *share, CURLSHoption option, ...)
+//CURLSHcode curl_share_setopt(struct Curl_share *share, CURLSHoption option, ...)
+CURLSHcode curl_share_setopt(CURLSH *handle, CURLSHoption option, ...)
 {
+  struct Curl_share *share = (struct Curl_share *)handle;
   va_list param;
   int type;
   curl_lock_function lockfunc;
@@ -179,9 +180,10 @@ curl_share_setopt(struct Curl_share *share, CURLSHoption option, ...)
   return res;
 }
 
-CURLSHcode
-curl_share_cleanup(struct Curl_share *share)
+//CURLSHcode curl_share_cleanup(struct Curl_share *share)
+CURLSHcode curl_share_cleanup(CURLSH *handle)
 {
+  struct Curl_share *share = (struct Curl_share *)handle;
   if(share == NULL)
     return CURLSHE_INVALID;
 

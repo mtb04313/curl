@@ -24,6 +24,7 @@
 
 #include <curl/curl.h>
 
+#include "urldata.h" /* for struct Curl_easy */ // PSoC moved here
 #include "formdata.h"
 #if !defined(CURL_DISABLE_HTTP) && !defined(CURL_DISABLE_MIME)
 
@@ -31,7 +32,7 @@
 #include <libgen.h>
 #endif
 
-#include "urldata.h" /* for struct Curl_easy */
+//PSoC was here: #include "urldata.h" /* for struct Curl_easy */
 #include "mime.h"
 #include "non-ascii.h"
 #include "vtls/vtls.h"
@@ -246,7 +247,8 @@ CURLFORMcode FormAdd(struct curl_httppost **httppost,
     }
     else {
       /* This is not array-state, get next option */
-      option = va_arg(params, CURLformoption);
+      //option = va_arg(params, CURLformoption);
+      option = va_arg(params, int);   // PSoC edited
       if(CURLFORM_END == option)
         break;
     }

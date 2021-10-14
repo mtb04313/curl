@@ -1303,7 +1303,8 @@ CURLcode Curl_mime_duppart(curl_mimepart *dst, const curl_mimepart *src)
  */
 
 /* Create a mime handle. */
-curl_mime *curl_mime_init(struct Curl_easy *easy)
+//curl_mime *curl_mime_init(struct Curl_easy *easy)
+curl_mime *curl_mime_init(CURL *easy)
 {
   curl_mime *mime;
 

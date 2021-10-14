@@ -2030,8 +2030,8 @@ void Curl_free_request_state(struct Curl_easy *data)
   Curl_safefree(data->req.newurl);
 
 #ifndef CURL_DISABLE_DOH
-  Curl_close(&data->req.doh.probe[0].easy);
-  Curl_close(&data->req.doh.probe[1].easy);
+  Curl_close((struct Curl_easy **)&data->req.doh.probe[0].easy);
+  Curl_close((struct Curl_easy **)&data->req.doh.probe[1].easy);
 #endif
 }
 
