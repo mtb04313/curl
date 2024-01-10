@@ -273,6 +273,12 @@ struct timeval {
  */
 #if defined(USE_LWIPSOCK)
 #  define sfcntl  lwip_fcntl
+
+// fixed compile error:
+// ../mtb_shared/lwip/STABLE-2_1_2_RELEASE/src/include/lwip/sockets.h:674:51: error: conflicting types for 'lwip_fcntl'; have 'int(int,  int, ...)'
+#undef fcntl
+#define fcntl(s,cmd,val)
+
 #else
 #  define sfcntl  fcntl
 #endif
